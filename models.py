@@ -92,7 +92,7 @@ def fill_test_data():
 
 # Вызов инициализации при импорте
 init_db()
-fill_test_data()
+# fill_test_data()  # ОТКЛЮЧЕНО: чтобы не затирать актуальные данные
 
 def migrate_orders_add_status():
     if os.path.exists(ORDERS_FILE):
