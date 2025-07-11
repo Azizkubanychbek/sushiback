@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% block content %}
 <h2>Заказы</h2>
+<div class="table-responsive">
 <table class="table table-bordered">
     <thead>
         <tr>
@@ -35,6 +36,7 @@
     {% endfor %}
     </tbody>
 </table>
+</div>
 <h3>Добавить заказ</h3>
 <form method="post">
     <div class="mb-2">

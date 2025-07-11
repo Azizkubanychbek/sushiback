@@ -9,6 +9,7 @@
   {% endif %}
 {% endwith %}
 <h4>Себестоимость ролла: {{ total_cost }} руб.</h4>
+<div class="table-responsive">
 <table class="table table-bordered">
     <thead>
         <tr>
@@ -38,6 +39,7 @@
     {% endfor %}
     </tbody>
 </table>
+</div>
 <h4>Добавить ингредиент в рецепт</h4>
 <form method="post">
     <div class="row mb-2">
