@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Отчеты</h2>
+<h4>Сумма заказов за всё время: {{ total_income }}</h4>
+<h4>Расход ингредиентов:</h4>
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Ингредиент</th>
+            <th>Расход (всего)</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for item in ingredients_usage %}
+        <tr>
+            <td>{{ item['name'] }}</td>
+            <td>{{ item['used'] }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %} 

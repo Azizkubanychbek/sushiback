@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Заказы</h2>
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Дата/время</th>
+            <th>Ролл</th>
+            <th>Количество</th>
+            <th>Стоимость за 1 ролл</th>
+            <th>Сумма</th>
+            <th>Комментарий</th>
+            <th>Статус</th>
+            <th>Действие</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for order in orders %}
+        <tr>
+            <td>{{ order['order_time'] }}</td>
+            <td>{{ order['roll_name'] }}</td>
+            <td>{{ order['quantity'] }}</td>
+            <td>{{ order['cost_per_roll'] }}</td>
+            <td>{{ order['total_price'] }}</td>
+            <td>{{ order['comment'] }}</td>
+            <td>{{ order['status'] }}</td>
+            <td>
+                {% if order['status'] == 'Готовится' %}
+                    <a href="/orders/done/{{ order['id'] }}" class="btn btn-success btn-sm">Сделан</a>
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+<h3>Добавить заказ</h3>
+<form method="post">
+    <div class="mb-2">
+        <select name="roll_id" class="form-control" required>
+            <option value="">Выберите ролл</option>
+            {% for roll in rolls %}
+                <option value="{{ roll['id'] }}">{{ roll['name'] }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="mb-2">
+        <input type="number" name="quantity" min="1" value="1" class="form-control" required>
+    </div>
+    <div class="mb-2">
+        <input type="text" name="comment" placeholder="Комментарий к заказу (необязательно)" class="form-control">
+    </div>
+    <button type="submit" class="btn btn-primary">Добавить заказ</button>
+</form>
+{% if error %}
+<div class="alert alert-danger mt-2">{{ error }}</div>
+{% endif %}
+{% endblock %} 

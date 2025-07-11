@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Учет заказов суши</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">Суши-учет</a>
+        <div class="collapse navbar-collapse">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                {% if session['role'] == 'chef' %}
+                    <li class="nav-item"><a class="nav-link" href="/ingredients">Ингредиенты</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/rolls">Роллы</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/orders">Заказы</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/stock">Поставки/Списания</a></li>
+                {% elif session['role'] == 'staff' %}
+                    <li class="nav-item"><a class="nav-link" href="/orders">Заказы</a></li>
+                {% elif session['role'] == 'accountant' %}
+                    <li class="nav-item"><a class="nav-link" href="/accounting">Бухгалтерия</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/analytics">Аналитика</a></li>
+                {% elif session['role'] == 'owner' %}
+                    <li class="nav-item"><a class="nav-link" href="/accounting">Бухгалтерия</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/analytics">Аналитика</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/history">История</a></li>
+                {% endif %}
+            </ul>
+            {% if session['role'] %}
+                <span class="navbar-text me-3">Роль: {{ 'Шеф' if session['role']=='chef' else 'Сотрудник' }}</span>
+                <a href="/logout" class="btn btn-outline-secondary btn-sm">Выйти</a>
+            {% endif %}
+        </div>
+    </div>
+</nav>
+<div class="container">
+    {% block content %}{% endblock %}
+</div>
+</body>
+</html> 
