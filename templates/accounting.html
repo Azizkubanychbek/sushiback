@@ -61,6 +61,14 @@
         </div>
     </div>
 </form>
+{% if session['role'] in ['accountant', 'owner', 'admin'] %}
+<div class="mb-3">
+    <a href="/download_backups" class="btn btn-1c btn-lg" style="background:#1976d2;color:#fff;font-weight:bold;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-file-earmark-zip" viewBox="0 0 16 16" style="vertical-align:middle;margin-right:6px;"><path d="M6.5 7h1v1h-1V7zm0 2h1v1h-1V9zm0 2h1v1h-1v-1z"/><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3.5-2V4a1 1 0 0 0 1 1h1.5L10.5 2.5zM4 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5.5H11a2 2 0 0 1-2-2V1H4z"/></svg>
+        Скачать все бэкапы (zip)
+    </a>
+</div>
+{% endif %}
 <h4>Суммарные показатели</h4>
 <ul>
     <li>Поступления (продажи): <b>{{ total_income }}</b> сом</li>
@@ -76,7 +84,7 @@
 <table class="table-1c">
     <thead>
         <tr>
-            <th>Название</th>
+            <th>ID (Название)</th>
             <th class="num">Остаток</th>
             <th>Ед. изм.</th>
             <th class="num">Цена за ед.</th>
@@ -89,7 +97,7 @@
         {% set stock_value = (ing.quantity or 0) * (ing.price_per_unit or 0) %}
         {% set total_stock_value = total_stock_value + stock_value %}
         <tr>
-            <td>{{ ing.name }}</td>
+            <td>{{ ing.id }} ({{ ing.name }})</td>
             <td class="num">{{ ing.quantity }}</td>
             <td>{{ ing.unit }}</td>
             <td class="num">{{ ing.price_per_unit }}</td>
@@ -125,7 +133,7 @@
 <table class="table-1c">
     <thead>
         <tr>
-            <th>Название</th>
+            <th>ID (Название)</th>
             <th>Себестоимость</th>
             <th>Продажная цена</th>
             <th>Изменить цену</th>
@@ -134,7 +142,7 @@
     <tbody>
     {% for roll_id, roll in rolls.items() %}
         <tr>
-            <td>{{ roll.name }}</td>
+            <td>{{ roll_id }} ({{ roll.name }})</td>
             <td>{{ roll.cost }}</td>
             <td>{{ roll.sale_price }}</td>
             <td>
@@ -154,7 +162,7 @@
     <thead>
         <tr>
             <th>Дата</th>
-            <th>Ролл</th>
+            <th>ID (Ролл)</th>
             <th>Кол-во</th>
             <th>Сумма (продажа)</th>
             <th>Себестоимость</th>
@@ -166,7 +174,7 @@
     {% for order in orders %}
         <tr>
             <td>{{ order.order_time }}</td>
-            <td>{{ rolls[order.roll_id].name if order.roll_id in rolls else order.roll_id }}</td>
+            <td>{{ order.roll_id }} ({{ rolls[order.roll_id].name if order.roll_id in rolls else order.roll_id }})</td>
             <td>{{ order.quantity }}</td>
             <td>{{ (rolls[order.roll_id].sale_price * order.quantity) if order.roll_id in rolls else '' }}</td>
             <td>{{ (rolls[order.roll_id].cost * order.quantity) if order.roll_id in rolls else '' }}</td>
@@ -181,7 +189,7 @@
     <thead>
         <tr>
             <th>Дата</th>
-            <th>Ингредиент</th>
+            <th>ID (Ингредиент)</th>
             <th>Количество</th>
             <th>Комментарий</th>
         </tr>
@@ -190,7 +198,7 @@
     {% for op in stock_in %}
         <tr>
             <td>{{ op.date }}</td>
-            <td>{% set ing = ingredients|selectattr('id', 'equalto', op.ingredient_id)|first %}{{ ing.name if ing else op.ingredient_id }}</td>
+            <td>{% set ing = ingredients|selectattr('id', 'equalto', op.ingredient_id)|first %}{{ op.ingredient_id }} ({{ ing.name if ing else op.ingredient_id }})</td>
             <td>{{ op.amount }}</td>
             <td>{{ op.comment }}</td>
         </tr>
@@ -202,7 +210,7 @@
     <thead>
         <tr>
             <th>Дата</th>
-            <th>Ингредиент</th>
+            <th>ID (Ингредиент)</th>
             <th>Количество</th>
             <th>Комментарий</th>
         </tr>
@@ -211,7 +219,7 @@
     {% for op in stock_out %}
         <tr>
             <td>{{ op.date }}</td>
-            <td>{% set ing = ingredients|selectattr('id', 'equalto', op.ingredient_id)|first %}{{ ing.name if ing else op.ingredient_id }}</td>
+            <td>{% set ing = ingredients|selectattr('id', 'equalto', op.ingredient_id)|first %}{{ op.ingredient_id }} ({{ ing.name if ing else op.ingredient_id }})</td>
             <td>{{ op.amount }}</td>
             <td>{{ op.comment }}</td>
         </tr>

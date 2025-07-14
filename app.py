@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, jsonify, send_file, send_from_directory
 from models import init_db
 import pandas as pd
 from models import INGREDIENTS_FILE
@@ -10,6 +10,9 @@ from models import ORDER_INGREDIENTS_FILE
 import pandas as pd
 STOCK_HISTORY_FILE = 'stock_history.xlsx'
 from functools import wraps
+import zipfile
+import io
+import glob
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Для flash-сообщений
@@ -668,10 +671,34 @@ def accounting():
                     total_stock_out += op['amount']
     # --- Экспорт в Excel ---
     if export == '1':
+        # Для заказов: добавляем roll_name
+        orders_export = []
+        for order in filtered_orders:
+            roll_id = order['roll_id']
+            roll_name = roll_costs[roll_id]['name'] if roll_id in roll_costs else str(roll_id)
+            row = dict(order)
+            row['roll_name'] = roll_name
+            orders_export.append(row)
+        # Для поставок/списаний: добавляем ingredient_name
+        def add_ing_name(op_list):
+            res = []
+            for op in op_list:
+                ing_id = op.get('ingredient_id')
+                ing_name = None
+                for ing in ingredients_df.to_dict(orient='records'):
+                    if str(ing.get('id')) == str(ing_id):
+                        ing_name = ing.get('name')
+                        break
+                row = dict(op)
+                row['ingredient_name'] = ing_name if ing_name else op.get('ingredient_name', '')
+                res.append(row)
+            return res
+        stock_in_export = add_ing_name(stock_in)
+        stock_out_export = add_ing_name(stock_out)
         with pd.ExcelWriter('accounting_export.xlsx') as writer:
-            pd.DataFrame(filtered_orders).to_excel(writer, sheet_name='Заказы', index=False)
-            pd.DataFrame(stock_in).to_excel(writer, sheet_name='Поставки', index=False)
-            pd.DataFrame(stock_out).to_excel(writer, sheet_name='Списания', index=False)
+            pd.DataFrame(orders_export).to_excel(writer, sheet_name='Заказы', index=False)
+            pd.DataFrame(stock_in_export).to_excel(writer, sheet_name='Поставки', index=False)
+            pd.DataFrame(stock_out_export).to_excel(writer, sheet_name='Списания', index=False)
             pd.DataFrame([{
                 'Поступления (продажи)': total_income,
                 'Себестоимость реализованного': total_cost,
@@ -704,6 +731,58 @@ def accounting():
                     'Сумма на складе': round(stock_value, 2)
                 })
             pd.DataFrame(ingredients_export).to_excel(writer, sheet_name='Ингредиенты', index=False)
+            # Лист "Рецепты"
+            recipes_export = []
+            for _, rec in recipes_df.iterrows():
+                roll_id = rec['roll_id']
+                ingredient_id = rec['ingredient_id']
+                roll_name = roll_costs[roll_id]['name'] if roll_id in roll_costs else str(roll_id)
+                ing_name = None
+                for ing in ingredients_df.to_dict(orient='records'):
+                    if str(ing.get('id')) == str(ingredient_id):
+                        ing_name = ing.get('name')
+                        break
+                recipes_export.append({
+                    'roll_id': roll_id,
+                    'roll_name': roll_name,
+                    'ingredient_id': ingredient_id,
+                    'ingredient_name': ing_name if ing_name else '',
+                    'amount_per_roll': rec['amount_per_roll']
+                })
+            pd.DataFrame(recipes_export).to_excel(writer, sheet_name='Рецепты', index=False)
+            # Лист "Расход по заказам"
+            if os.path.exists('order_ingredients.xlsx') and os.path.exists('orders.xlsx'):
+                order_ingredients_df = pd.read_excel('order_ingredients.xlsx')
+                orders_df_full = pd.read_excel('orders.xlsx')
+                recipes_df_full = pd.read_excel('roll_recipes.xlsx') if os.path.exists('roll_recipes.xlsx') else pd.DataFrame()
+                order_roll_map = {row['id']: row['roll_id'] for _, row in orders_df_full.iterrows()}
+                roll_name_map = {rid: roll['name'] for rid, roll in roll_costs.items()}
+                ing_name_map = {ing['id']: ing['name'] for ing in ingredients_df.to_dict(orient='records')}
+                oi_export = []
+                for _, row in order_ingredients_df.iterrows():
+                    order_id = row['order_id']
+                    ingredient_id = row['ingredient_id']
+                    used_amount = row['used_amount']
+                    roll_id = order_roll_map.get(order_id, '')
+                    roll_name = roll_name_map.get(roll_id, '')
+                    ing_name = ing_name_map.get(ingredient_id, '')
+                    oi_export.append({
+                        'order_id': order_id,
+                        'roll_id': roll_id,
+                        'roll_name': roll_name,
+                        'ingredient_id': ingredient_id,
+                        'ingredient_name': ing_name,
+                        'used_amount': used_amount
+                    })
+                pd.DataFrame(oi_export).to_excel(writer, sheet_name='Расход по заказам', index=False)
+            # Лист "Сотрудники"
+            if os.path.exists('employees.xlsx'):
+                employees_df = pd.read_excel('employees.xlsx')
+                pd.DataFrame(employees_df).to_excel(writer, sheet_name='Сотрудники', index=False)
+            # Лист "Посещаемость"
+            if os.path.exists('attendance.xlsx'):
+                attendance_df = pd.read_excel('attendance.xlsx')
+                pd.DataFrame(attendance_df).to_excel(writer, sheet_name='Посещаемость', index=False)
         return send_file('accounting_export.xlsx', as_attachment=True)
     # --- Список ингредиентов для фильтра ---
     ingredients = ingredients_df.to_dict(orient='records') if not ingredients_df.empty else []
@@ -858,6 +937,18 @@ def api_menu():
         {'id': 'vegan', 'name': 'Вегетарианские'}
     ]
     return jsonify({'categories': categories, 'rolls': menu})
+
+@app.route('/download_backups')
+@role_required(['admin', 'accountant', 'owner'])
+def download_backups():
+    # Собираем все .xlsx-файлы в рабочей папке
+    files = glob.glob('*.xlsx')
+    mem_zip = io.BytesIO()
+    with zipfile.ZipFile(mem_zip, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+        for file in files:
+            zf.write(file)
+    mem_zip.seek(0)
+    return send_file(mem_zip, mimetype='application/zip', as_attachment=True, download_name='sushi_backups.zip')
 
 if __name__ == '__main__':
     import os

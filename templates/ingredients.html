@@ -12,7 +12,7 @@
 <table class="table table-bordered">
     <thead>
         <tr>
-            <th>Название</th>
+            <th>ID (Название)</th>
             <th>Остаток</th>
             <th>Ед. изм.</th>
             <th>Цена за ед.</th>
@@ -23,14 +23,14 @@
     <tbody>
     {% for ing in ingredients %}
         <tr>
-            <td>{{ ing['name'] }}</td>
-            <td>{{ ing['quantity'] }}</td>
-            <td>{{ ing['unit'] }}</td>
-            <td>{{ ing['price_per_unit'] }}</td>
-            <td>{{ ing['used_in'] }}</td>
+            <td>{{ ing.id }} ({{ ing.name }})</td>
+            <td>{{ ing.quantity }}</td>
+            <td>{{ ing.unit }}</td>
+            <td>{{ ing.price_per_unit }}</td>
+            <td>{{ ing.used_in }}</td>
             <td>
-                <a href="/ingredients/edit/{{ ing['id'] }}" class="btn btn-warning btn-sm">Редактировать</a>
-                <a href="/ingredients/delete/{{ ing['id'] }}" class="btn btn-danger btn-sm" onclick="return confirm('Удалить ингредиент?');">Удалить</a>
+                <a href="/ingredients/edit/{{ ing.id }}" class="btn btn-warning btn-sm">Редактировать</a>
+                <a href="/ingredients/delete/{{ ing.id }}" class="btn btn-danger btn-sm" onclick="return confirm('Удалить ингредиент?');">Удалить</a>
             </td>
         </tr>
     {% endfor %}

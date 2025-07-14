@@ -13,7 +13,7 @@
 <table class="table table-bordered">
     <thead>
         <tr>
-            <th>Ингредиент</th>
+            <th>ID (Ингредиент)</th>
             <th>На 1 ролл</th>
             <th>Ед. изм.</th>
             <th>Остаток на складе</th>
@@ -25,7 +25,7 @@
     <tbody>
     {% for ing in ingredients %}
         <tr>
-            <td>{{ ing.name }}</td>
+            <td>{{ ing.id }} ({{ ing.name }})</td>
             <td>{{ ing.used }}</td>
             <td>{{ ing.unit }}</td>
             <td>{{ ing.on_stock }}</td>
@@ -47,7 +47,7 @@
             <select name="ingredient_id" class="form-control" required>
                 <option value="">Выберите ингредиент</option>
                 {% for ing in available_ingredients %}
-                    <option value="{{ ing.id }}">{{ ing.name }} ({{ ing.unit }})</option>
+                    <option value="{{ ing.id }}">{{ ing.id }} ({{ ing.name }}) ({{ ing.unit }})</option>
                 {% endfor %}
             </select>
         </div>
