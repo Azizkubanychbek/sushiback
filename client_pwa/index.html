@@ -108,43 +108,10 @@
   <div>© 2024 Суши-бар. Все права защищены.<br>г. Бишкек, ул. Примерная, 1 | +996 555 123 456</div>
 </footer>
 <script>
-// Категории меню
-const categories = [
-  { id: 'classic', name: 'Роллы', img: 'image.png' },
-  { id: 'baked', name: 'Тёплые роллы', img: 'image.png' },
-  { id: 'no_rice', name: 'Роллы без риса', img: 'image.png' },
-  { id: 'sets', name: 'Сеты', img: 'image.png' },
-  { id: 'sushi', name: 'Суши', img: 'image.png' },
-  { id: 'vegan', name: 'Вегетарианские', img: 'image.png' }
-];
-// Пример распределения роллов по категориям (можно скорректировать)
-const rolls = [
-  { id: 1, name: 'Филадельфия', price: 390, weight: 280, category: 'classic', ingredients: 'Лосось, сыр, огурец, рис, нори' },
-  { id: 2, name: 'Калифорния', price: 370, weight: 300, category: 'classic', ingredients: 'Краб, авокадо, огурец, икра масаго, рис, нори' },
-  { id: 3, name: 'Каппа маки', price: 220, weight: 185, category: 'vegan', ingredients: 'Огурец, рис, нори' },
-  { id: 4, name: 'Унаги маки', price: 410, weight: 320, category: 'classic', ingredients: 'Угорь, рис, нори, кунжут' },
-  { id: 5, name: 'Крабовый ролл', price: 350, weight: 320, category: 'classic', ingredients: 'Краб, сыр, рис, нори' },
-  { id: 6, name: 'Запечённый лосось', price: 420, weight: 350, category: 'baked', ingredients: 'Лосось, сыр, рис, нори, соус' },
-  { id: 7, name: 'Запечённый краб', price: 410, weight: 350, category: 'baked', ingredients: 'Краб, сыр, рис, нори, соус' },
-  { id: 8, name: 'Запечённый угорь', price: 430, weight: 350, category: 'baked', ingredients: 'Угорь, сыр, рис, нори, соус' },
-  { id: 9, name: 'Сет Классика', price: 1200, weight: 900, category: 'sets', ingredients: 'Ассорти классических роллов' },
-  { id: 10, name: 'Сет Филадельфия', price: 1400, weight: 1000, category: 'sets', ingredients: 'Ассорти роллов с лососем и сыром' },
-  { id: 11, name: 'Суши лосось', price: 120, weight: 40, category: 'sushi', ingredients: 'Лосось, рис' },
-  { id: 12, name: 'Суши угорь', price: 130, weight: 40, category: 'sushi', ingredients: 'Угорь, рис' },
-  { id: 13, name: 'Овощной ролл', price: 210, weight: 180, category: 'vegan', ingredients: 'Огурец, авокадо, перец, рис, нори' },
-  { id: 14, name: 'Сет Веган', price: 950, weight: 800, category: 'sets', ingredients: 'Ассорти вегетарианских роллов' },
-  { id: 15, name: 'Суши креветка', price: 130, weight: 40, category: 'sushi', ingredients: 'Креветка, рис' },
-  { id: 16, name: 'Сет Запечённый', price: 1350, weight: 1100, category: 'sets', ingredients: 'Ассорти запечённых роллов' },
-  { id: 17, name: 'Сет Мини', price: 700, weight: 600, category: 'sets', ingredients: 'Ассорти мини-роллов' },
-  { id: 18, name: 'Сет Мега', price: 1800, weight: 1600, category: 'sets', ingredients: 'Большой сет роллов' },
-  { id: 19, name: 'Веган маки', price: 230, weight: 200, category: 'vegan', ingredients: 'Огурец, авокадо, рис, нори' },
-  { id: 20, name: 'Сет Лайт', price: 800, weight: 700, category: 'sets', ingredients: 'Лёгкий сет роллов' },
-  { id: 21, name: 'Сет Пати', price: 2100, weight: 2000, category: 'sets', ingredients: 'Праздничный сет роллов' },
-  { id: 22, name: 'Сет Дракон', price: 1600, weight: 1200, category: 'sets', ingredients: 'Ассорти роллов с угрём' },
-  { id: 23, name: 'Сет Вкусный', price: 1100, weight: 900, category: 'sets', ingredients: 'Вкусный сет роллов' },
-  { id: 24, name: 'Сет Овощной', price: 900, weight: 800, category: 'sets', ingredients: 'Овощной сет роллов' }
-];
+let categories = [];
+let rolls = [];
 let currentCategory = null;
+
 function goHome() {
   currentCategory = null;
   document.getElementById('searchInput').value = '';
@@ -167,7 +134,7 @@ function renderMain() {
   categories.forEach(cat => {
     html += `<div class="col-12 col-sm-6 col-md-4 col-lg-4 mb-4">
       <div class="category-card h-100" onclick="renderCategory('${cat.id}')">
-        <img src="${cat.img}" class="category-img" alt="${cat.name}">
+        <img src="image.png" class="category-img" alt="${cat.name}">
         <div class="category-title">${cat.name}</div>
       </div>
     </div>`;
@@ -179,7 +146,8 @@ function renderCategory(catId) {
   currentCategory = catId;
   document.getElementById('searchInput').value = '';
   const filtered = rolls.filter(r => r.category === catId);
-  renderRollsGrid(filtered, categories.find(c => c.id === catId).name);
+  const cat = categories.find(c => c.id === catId);
+  renderRollsGrid(filtered, cat ? cat.name : '');
 }
 function renderRollsGrid(rollsArr, title) {
   const main = document.getElementById('main-content');
@@ -293,8 +261,20 @@ function showThankYou() {
     </div>
   `;
 }
+// --- Загрузка меню из API ---
+async function loadMenu() {
+  try {
+    const resp = await fetch('/api/menu');
+    const data = await resp.json();
+    categories = data.categories;
+    rolls = data.rolls;
+    goHome();
+  } catch (e) {
+    document.getElementById('main-content').innerHTML = `<div class='text-center text-danger py-5'>Ошибка загрузки меню :(</div>`;
+  }
+}
 window.onload = function() {
-  goHome();
+  loadMenu();
   setCart(getCart());
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js');

@@ -9,6 +9,7 @@ ROLL_RECIPES_FILE = 'roll_recipes.xlsx'
 ORDERS_FILE = 'orders.xlsx'
 EMPLOYEES_FILE = 'employees.xlsx'
 ATTENDANCE_FILE = 'attendance.xlsx'
+STOCK_HISTORY_FILE = 'stock_history.xlsx'
 
 def init_db():
     if not os.path.exists(INGREDIENTS_FILE):
@@ -34,6 +35,9 @@ def init_db():
     if not os.path.exists(ATTENDANCE_FILE):
         df = pd.DataFrame(columns=['employee_id', 'name', 'role', 'date', 'time', 'mark_type'])
         df.to_excel(ATTENDANCE_FILE, index=False)
+    if not os.path.exists(STOCK_HISTORY_FILE):
+        df = pd.DataFrame(columns=['date', 'ingredient_id', 'ingredient_name', 'operation', 'amount', 'comment'])
+        df.to_excel(STOCK_HISTORY_FILE, index=False)
 
 def fill_test_data():
     import numpy as np

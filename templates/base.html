@@ -22,6 +22,12 @@
     </style>
 </head>
 <body>
+{% if session['role'] in ['accountant', 'owner'] %}
+<div style="position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 1000; text-align: center; width: 340px;">
+    <div style="font-family: monospace, 'Arial Narrow', Arial; font-size: 2.1em; font-weight: bold; letter-spacing: 2px; color: #1a237e; text-shadow: 1px 1px 2px #bfc6e0; line-height: 1;">anteyko 7c</div>
+    <div style="font-family: monospace, 'Arial Narrow', Arial; font-size: 0.95em; color: #888; letter-spacing: 1px; margin-top: 2px;">system</div>
+</div>
+{% endif %}
 <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
     <div class="container-fluid">
         <a class="navbar-brand" href="/">Суши-учет</a>
@@ -64,6 +70,57 @@
     .navbar-toggler { display: block !important; }
     .navbar-collapse { width: 100%; }
   }
+/* 1С-стиль для бухгалтерии */
+.table-1c {
+  border-collapse: collapse;
+  width: 100%;
+  background: #fff;
+  font-size: 1.04em;
+}
+.table-1c th, .table-1c td {
+  border: 1.5px solid #e0c97f;
+  padding: 6px 10px;
+}
+.table-1c th {
+  background: #fffbe6;
+  color: #222;
+  font-weight: bold;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.table-1c td.num, .table-1c th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.table-1c tfoot th, .table-1c tfoot td {
+  background: #fff7b2;
+  font-weight: bold;
+  font-size: 1.08em;
+  color: #222;
+}
+.table-1c tr:hover td {
+  background: #f7f3d7;
+}
+.btn-1c {
+  background: #FFD700;
+  color: #222;
+  font-weight: bold;
+  border: 1.5px solid #e0c97f;
+  border-radius: 4px;
+  box-shadow: none;
+}
+.btn-1c:hover, .btn-1c:focus {
+  background: #ffe066;
+  color: #111;
+  border-color: #e0c97f;
+}
+.badge.bg-info {
+  background: #ffe066 !important;
+  color: #222 !important;
+  font-weight: bold;
+}
 </style>
 </body>
 </html> 

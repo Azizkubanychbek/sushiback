@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, session, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, jsonify
 from models import init_db
 import pandas as pd
 from models import INGREDIENTS_FILE
@@ -485,46 +485,49 @@ def reports():
 @app.route('/stock', methods=['GET', 'POST'])
 @role_required(['chef'])
 def stock():
-    ingredients_df = pd.read_excel(INGREDIENTS_FILE)
-    history_df = pd.read_excel(STOCK_HISTORY_FILE) if os.path.exists(STOCK_HISTORY_FILE) else pd.DataFrame(columns=['date', 'ingredient_id', 'ingredient_name', 'operation', 'amount', 'comment'])
+    import pandas as pd
+    import os
+    from datetime import datetime
     message = None
+    ingredients_df = pd.read_excel(INGREDIENTS_FILE)
     if request.method == 'POST':
-        if session.get('role') == 'owner':
-            abort(403)
-        ing_id = int(request.form['ingredient_id'])
+        ingredient_id = int(request.form['ingredient_id'])
         amount = float(request.form['amount'])
         operation = request.form['operation']
         comment = request.form.get('comment', '')
-        ing_row = ingredients_df[ingredients_df['id'] == ing_id]
-        if ing_row.empty:
-            message = 'Ингредиент не найден.'
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ing_row = ingredients_df[ingredients_df['id'] == ingredient_id]
+        ingredient_name = ing_row.iloc[0]['name'] if not ing_row.empty else str(ingredient_id)
+        # Обновление остатков
+        if operation == 'add':
+            ingredients_df.loc[ingredients_df['id'] == ingredient_id, 'quantity'] += amount
+            op_type = 'Поставка'
         else:
-            idx = ing_row.index[0]
-            if operation == 'add':
-                ingredients_df.at[idx, 'quantity'] += amount
-                op_name = 'Поставка'
-            elif operation == 'sub':
-                if ingredients_df.at[idx, 'quantity'] < amount:
-                    message = 'Недостаточно на складе для списания.'
-                else:
-                    ingredients_df.at[idx, 'quantity'] -= amount
-                    op_name = 'Списание'
-            if not message:
-                ingredients_df.to_excel(INGREDIENTS_FILE, index=False)
-                # Запись в историю
-                new_row = pd.DataFrame([{
-                    'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'ingredient_id': ing_id,
-                    'ingredient_name': ing_row.iloc[0]['name'],
-                    'operation': op_name,
-                    'amount': amount,
-                    'comment': comment
-                }])
-                history_df = pd.concat([history_df, new_row], ignore_index=True)
-                history_df.to_excel(STOCK_HISTORY_FILE, index=False)
-                message = f'{op_name} выполнена.'
-    # Для отображения истории
-    history = history_df.sort_values('date', ascending=False).to_dict(orient='records') if not history_df.empty else []
+            ingredients_df.loc[ingredients_df['id'] == ingredient_id, 'quantity'] -= amount
+            op_type = 'Списание'
+        ingredients_df.to_excel(INGREDIENTS_FILE, index=False)
+        # Лог в историю
+        if os.path.exists(STOCK_HISTORY_FILE):
+            history_df = pd.read_excel(STOCK_HISTORY_FILE)
+        else:
+            history_df = pd.DataFrame(columns=['date', 'ingredient_id', 'ingredient_name', 'operation', 'amount', 'comment'])
+        new_row = pd.DataFrame([{
+            'date': now,
+            'ingredient_id': ingredient_id,
+            'ingredient_name': ingredient_name,
+            'operation': op_type,
+            'amount': amount,
+            'comment': comment
+        }])
+        history_df = pd.concat([history_df, new_row], ignore_index=True)
+        history_df.to_excel(STOCK_HISTORY_FILE, index=False)
+        message = f'{op_type} {ingredient_name} на {amount} успешно проведена.'
+    # История операций
+    if os.path.exists(STOCK_HISTORY_FILE):
+        history_df = pd.read_excel(STOCK_HISTORY_FILE)
+    else:
+        history_df = pd.DataFrame(columns=['date', 'ingredient_id', 'ingredient_name', 'operation', 'amount', 'comment'])
+    history = history_df.to_dict(orient='records')
     return render_template('stock.html', ingredients=ingredients_df.to_dict(orient='records'), history=history, message=message)
 
 @app.route('/audit')
@@ -557,9 +560,11 @@ def accounting():
     import pandas as pd
     import os
     from datetime import datetime
+    from flask import send_file
     # --- Фильтрация по дате ---
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
+    export = request.args.get('export')
     today = datetime.today()
     if not date_from:
         date_from = today.replace(day=1).strftime('%Y-%m-%d')
@@ -619,9 +624,18 @@ def accounting():
     filtered_orders = []
     total_income = 0
     total_cost = 0
+    roll_id_filter = request.args.get('roll_id')
+    order_status_filter = request.args.get('order_status')
+    comment_filter = request.args.get('comment', '').strip().lower()
     if not orders_df.empty:
         for _, order in orders_df.iterrows():
             if in_period(order['order_time']):
+                if roll_id_filter and str(order['roll_id']) != roll_id_filter:
+                    continue
+                if order_status_filter and str(order.get('status', '')) != order_status_filter:
+                    continue
+                if comment_filter and comment_filter not in str(order.get('comment', '')).lower():
+                    continue
                 roll_id = order['roll_id']
                 quantity = order['quantity']
                 sale_price = roll_costs[roll_id]['sale_price'] if roll_id in roll_costs else 0
@@ -634,15 +648,65 @@ def accounting():
     stock_out = []
     total_stock_in = 0
     total_stock_out = 0
+    ingredient_id_filter = request.args.get('ingredient_id')
+    operation_filter = request.args.get('operation')
+    comment_filter_stock = comment_filter
     if not stock_df.empty:
         for _, op in stock_df.iterrows():
             if in_period(op['date']):
+                if ingredient_id_filter and str(op.get('ingredient_id', '')) != ingredient_id_filter:
+                    continue
+                if operation_filter and str(op.get('operation', '')) != operation_filter:
+                    continue
+                if comment_filter_stock and comment_filter_stock not in str(op.get('comment', '')).lower():
+                    continue
                 if op['operation'] == 'Поставка':
                     stock_in.append(op)
                     total_stock_in += op['amount']
                 elif op['operation'] == 'Списание':
                     stock_out.append(op)
                     total_stock_out += op['amount']
+    # --- Экспорт в Excel ---
+    if export == '1':
+        with pd.ExcelWriter('accounting_export.xlsx') as writer:
+            pd.DataFrame(filtered_orders).to_excel(writer, sheet_name='Заказы', index=False)
+            pd.DataFrame(stock_in).to_excel(writer, sheet_name='Поставки', index=False)
+            pd.DataFrame(stock_out).to_excel(writer, sheet_name='Списания', index=False)
+            pd.DataFrame([{
+                'Поступления (продажи)': total_income,
+                'Себестоимость реализованного': total_cost,
+                'Поставки (всего)': total_stock_in,
+                'Списания (всего)': total_stock_out,
+                'Зарплата': salary,
+                'Аренда': rent,
+                'Прибыль': total_income - total_cost - salary - rent
+            }]).to_excel(writer, sheet_name='Итоги', index=False)
+            # Лист "Роллы"
+            rolls_export = []
+            for rid, roll in roll_costs.items():
+                rolls_export.append({
+                    'id': rid,
+                    'Название': roll['name'],
+                    'Себестоимость': roll['cost'],
+                    'Цена продажи': roll['sale_price']
+                })
+            pd.DataFrame(rolls_export).to_excel(writer, sheet_name='Роллы', index=False)
+            # Лист "Ингредиенты"
+            ingredients_export = []
+            for ing in ingredients_df.to_dict(orient='records'):
+                stock_value = (ing.get('quantity') or 0) * (ing.get('price_per_unit') or 0)
+                ingredients_export.append({
+                    'id': ing.get('id'),
+                    'Название': ing.get('name'),
+                    'Остаток': ing.get('quantity'),
+                    'Ед. изм.': ing.get('unit'),
+                    'Цена за ед.': ing.get('price_per_unit'),
+                    'Сумма на складе': round(stock_value, 2)
+                })
+            pd.DataFrame(ingredients_export).to_excel(writer, sheet_name='Ингредиенты', index=False)
+        return send_file('accounting_export.xlsx', as_attachment=True)
+    # --- Список ингредиентов для фильтра ---
+    ingredients = ingredients_df.to_dict(orient='records') if not ingredients_df.empty else []
     return render_template('accounting.html',
         orders=filtered_orders,
         stock_in=stock_in,
@@ -655,7 +719,8 @@ def accounting():
         salary=salary,
         rent=rent,
         date_from=date_from,
-        date_to=date_to
+        date_to=date_to,
+        ingredients=ingredients
     )
 
 @app.route('/analytics', methods=['GET'])
@@ -727,6 +792,72 @@ def analytics():
         date_from=date_from,
         date_to=date_to
     )
+
+@app.route('/api/menu')
+def api_menu():
+    import pandas as pd
+    import os
+    # Пути к файлам
+    rolls_file = 'rolls.xlsx'
+    roll_recipes_file = 'roll_recipes.xlsx'
+    ingredients_file = 'ingredients.xlsx'
+    # Проверка наличия файлов
+    if not (os.path.exists(rolls_file) and os.path.exists(roll_recipes_file) and os.path.exists(ingredients_file)):
+        return jsonify({'error': 'Menu data not found'}), 404
+    # Чтение данных
+    rolls_df = pd.read_excel(rolls_file)
+    recipes_df = pd.read_excel(roll_recipes_file)
+    ingredients_df = pd.read_excel(ingredients_file)
+    # Категории (пример, можно расширить)
+    category_map = {
+        1: 'classic', 2: 'classic', 3: 'vegan', 4: 'classic', 5: 'classic',
+        6: 'baked', 7: 'baked', 8: 'baked', 9: 'sets', 10: 'sets',
+        11: 'sushi', 12: 'sushi', 13: 'vegan', 14: 'sets', 15: 'sushi',
+        16: 'sets', 17: 'sets', 18: 'sets', 19: 'vegan', 20: 'sets',
+        21: 'sets', 22: 'sets', 23: 'sets', 24: 'sets'
+    }
+    # Составляем меню
+    menu = []
+    for _, roll in rolls_df.iterrows():
+        roll_id = int(roll['id'])
+        name = str(roll['name'])
+        price = int(roll['sale_price']) if not pd.isna(roll['sale_price']) and str(roll['sale_price']).isdigit() else 0
+        # Состав и вес
+        recipe = recipes_df[recipes_df['roll_id'] == roll_id]
+        ingredients = []
+        weight = 0
+        for _, rec in recipe.iterrows():
+            ing_row = ingredients_df[ingredients_df['id'] == rec['ingredient_id']]
+            if not ing_row.empty:
+                ing_name = str(ing_row.iloc[0]['name'])
+                amount = rec['amount_per_roll']
+                if isinstance(amount, str):
+                    try:
+                        amount = float(amount.replace(',', '.'))
+                    except:
+                        amount = 0
+                weight += amount if isinstance(amount, (int, float)) else 0
+                ingredients.append(ing_name)
+        # Категория
+        category = category_map.get(roll_id, 'classic')
+        menu.append({
+            'id': roll_id,
+            'name': name,
+            'category': category,
+            'ingredients': ', '.join(ingredients),
+            'weight': int(weight),
+            'price': price
+        })
+    # Категории для фронта
+    categories = [
+        {'id': 'classic', 'name': 'Роллы'},
+        {'id': 'baked', 'name': 'Тёплые роллы'},
+        {'id': 'no_rice', 'name': 'Роллы без риса'},
+        {'id': 'sets', 'name': 'Сеты'},
+        {'id': 'sushi', 'name': 'Суши'},
+        {'id': 'vegan', 'name': 'Вегетарианские'}
+    ]
+    return jsonify({'categories': categories, 'rolls': menu})
 
 if __name__ == '__main__':
     import os
