@@ -11,6 +11,15 @@ EMPLOYEES_FILE = 'employees.xlsx'
 ATTENDANCE_FILE = 'attendance.xlsx'
 STOCK_HISTORY_FILE = 'stock_history.xlsx'
 
+# Статусы заказов
+ORDER_STATUSES = [
+    'Принят',
+    'Готовится',
+    'Готов',
+    'Отправлен',
+    'Доставлен'
+]
+
 def init_db():
     if not os.path.exists(INGREDIENTS_FILE):
         df = pd.DataFrame(columns=['id', 'name', 'quantity', 'unit', 'price_per_unit'])
@@ -22,7 +31,7 @@ def init_db():
         df = pd.DataFrame(columns=['roll_id', 'ingredient_id', 'amount_per_roll'])
         df.to_excel(ROLL_RECIPES_FILE, index=False)
     if not os.path.exists(ORDERS_FILE):
-        df = pd.DataFrame(columns=['id', 'roll_id', 'quantity', 'order_time', 'total_price'])
+        df = pd.DataFrame(columns=['id', 'roll_id', 'quantity', 'order_time', 'total_price', 'cost_per_roll', 'status', 'comment'])
         df.to_excel(ORDERS_FILE, index=False)
     if not os.path.exists(EMPLOYEES_FILE):
         df = pd.DataFrame([

@@ -417,7 +417,7 @@ def orders():
                     'order_time': now,
                     'total_price': total_cost,
                     'cost_per_roll': cost_per_roll,
-                    'status': 'Готовится',
+                    'status': 'Принят',
                     'comment': comment
                 }])
                 orders_df = pd.concat([orders_df, new_row], ignore_index=True)
@@ -463,6 +463,28 @@ def orders():
             'comment': row['comment'] if 'comment' in row else ''
         })
     return render_template('orders.html', orders=orders, rolls=rolls, error=error)
+
+@app.route('/orders/change_status/<int:order_id>', methods=['POST'])
+@role_required(['chef'])
+def change_order_status(order_id):
+    """Изменяет статус заказа"""
+    new_status = request.form.get('status')
+    if new_status in ['Принят', 'Готовится', 'Готов', 'Отправлен', 'Доставлен']:
+        orders_df = pd.read_excel(ORDERS_FILE)
+        if not orders_df.empty and order_id in orders_df['id'].values:
+            orders_df.loc[orders_df['id'] == order_id, 'status'] = new_status
+            orders_df.to_excel(ORDERS_FILE, index=False)
+            
+            # Логируем изменение статуса
+            log_audit('change_status', 'order', f'Order #{order_id}', f'Status changed to {new_status}')
+            
+            flash(f'Статус заказа #{order_id} изменен на "{new_status}"', 'success')
+        else:
+            flash('Заказ не найден', 'error')
+    else:
+        flash('Неверный статус', 'error')
+    
+    return redirect(url_for('orders'))
 
 @app.route('/orders/done/<int:order_id>')
 @role_required(['chef'])
@@ -887,14 +909,21 @@ def api_menu():
     rolls_df = pd.read_excel(rolls_file)
     recipes_df = pd.read_excel(roll_recipes_file)
     ingredients_df = pd.read_excel(ingredients_file)
-    # Категории (пример, можно расширить)
-    category_map = {
-        1: 'classic', 2: 'classic', 3: 'vegan', 4: 'classic', 5: 'classic',
-        6: 'baked', 7: 'baked', 8: 'baked', 9: 'sets', 10: 'sets',
-        11: 'sushi', 12: 'sushi', 13: 'vegan', 14: 'sets', 15: 'sushi',
-        16: 'sets', 17: 'sets', 18: 'sets', 19: 'vegan', 20: 'sets',
-        21: 'sets', 22: 'sets', 23: 'sets', 24: 'sets'
-    }
+    # Категории на основе названий роллов
+    def get_category(roll_name):
+        name_lower = roll_name.lower()
+        if 'темпура' in name_lower or 'запеч' in name_lower:
+            return 'baked'
+        elif 'маки' in name_lower and 'курица' in name_lower:
+            return 'sushi'
+        elif 'овощьной' in name_lower or 'вегетарианский' in name_lower:
+            return 'vegan'
+        elif 'сладкий' in name_lower:
+            return 'dessert'
+        elif 'соус' in name_lower:
+            return 'sauces'
+        else:
+            return 'classic'
     # Составляем меню
     menu = []
     for _, roll in rolls_df.iterrows():
@@ -918,23 +947,24 @@ def api_menu():
                 weight += amount if isinstance(amount, (int, float)) else 0
                 ingredients.append(ing_name)
         # Категория
-        category = category_map.get(roll_id, 'classic')
+        category = get_category(name)
         menu.append({
             'id': roll_id,
             'name': name,
             'category': category,
             'ingredients': ', '.join(ingredients),
             'weight': int(weight),
-            'price': price
+            'price': price,
+            'image': '/client_pwa/image.png'
         })
     # Категории для фронта
     categories = [
-        {'id': 'classic', 'name': 'Роллы'},
+        {'id': 'classic', 'name': 'Классические роллы'},
         {'id': 'baked', 'name': 'Тёплые роллы'},
-        {'id': 'no_rice', 'name': 'Роллы без риса'},
-        {'id': 'sets', 'name': 'Сеты'},
         {'id': 'sushi', 'name': 'Суши'},
-        {'id': 'vegan', 'name': 'Вегетарианские'}
+        {'id': 'vegan', 'name': 'Вегетарианские'},
+        {'id': 'dessert', 'name': 'Десерты'},
+        {'id': 'sauces', 'name': 'Соусы'}
     ]
     return jsonify({'categories': categories, 'rolls': menu})
 
@@ -949,6 +979,14 @@ def download_backups():
             zf.write(file)
     mem_zip.seek(0)
     return send_file(mem_zip, mimetype='application/zip', as_attachment=True, download_name='sushi_backups.zip')
+
+@app.route('/pwa')
+def pwa_index():
+    return send_from_directory('client_pwa', 'index.html')
+
+@app.route('/client_pwa/<path:filename>')
+def pwa_static(filename):
+    return send_from_directory('client_pwa', filename)
 
 if __name__ == '__main__':
     import os
