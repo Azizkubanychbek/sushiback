@@ -6,9 +6,9 @@
     <thead>
         <tr>
             <th>Дата/время</th>
-            <th>Ролл</th>
+            <th>Позиция</th>
             <th>Количество</th>
-            <th>Стоимость за 1 ролл</th>
+            <th>Стоимость за 1 ед.</th>
             <th>Сумма</th>
             <th>Комментарий</th>
             <th>Статус</th>
@@ -19,7 +19,14 @@
     {% for order in orders %}
         <tr>
             <td>{{ order['order_time'] }}</td>
-            <td>{{ order['roll_name'] }}</td>
+            <td>
+                {% if order['order_type'] == 'set' %}
+                    <span class="badge bg-info me-2">Сет</span>
+                {% else %}
+                    <span class="badge bg-secondary me-2">Ролл</span>
+                {% endif %}
+                {{ order['item_name'] }}
+            </td>
             <td>{{ order['quantity'] }}</td>
             <td>{{ order['cost_per_roll'] }}</td>
             <td>{{ order['total_price'] }}</td>
@@ -75,23 +82,48 @@
 </div>
 
 <h3>Добавить заказ</h3>
-<form method="post">
-    <div class="mb-2">
-        <select name="roll_id" class="form-control" required>
-            <option value="">Выберите ролл</option>
-            {% for roll in rolls %}
-                <option value="{{ roll['id'] }}">{{ roll['name'] }}</option>
-            {% endfor %}
-        </select>
+<div class="row">
+    <div class="col-md-6">
+        <h5>Добавить ролл</h5>
+        <form method="post">
+            <div class="mb-2">
+                <select name="roll_id" class="form-control" required>
+                    <option value="">Выберите ролл</option>
+                    {% for roll in rolls %}
+                        <option value="{{ roll['id'] }}">{{ roll['name'] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-2">
+                <input type="number" name="quantity" min="1" value="1" class="form-control" required>
+            </div>
+            <div class="mb-2">
+                <input type="text" name="comment" placeholder="Комментарий к заказу (необязательно)" class="form-control">
+            </div>
+            <button type="submit" class="btn btn-primary">Добавить ролл</button>
+        </form>
     </div>
-    <div class="mb-2">
-        <input type="number" name="quantity" min="1" value="1" class="form-control" required>
+    <div class="col-md-6">
+        <h5>Добавить сет</h5>
+        <form method="post" action="/orders/add_set">
+            <div class="mb-2">
+                <select name="set_id" class="form-control" required>
+                    <option value="">Выберите сет</option>
+                    {% for set in sets %}
+                        <option value="{{ set['id'] }}" data-price="{{ set['set_price'] }}">{{ set['name'] }} - {{ set['set_price'] }}с</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-2">
+                <input type="number" name="quantity" min="1" value="1" class="form-control" placeholder="Количество" required>
+            </div>
+            <div class="mb-2">
+                <input type="text" name="comment" placeholder="Комментарий к заказу (необязательно)" class="form-control">
+            </div>
+            <button type="submit" class="btn btn-primary">Добавить сет</button>
+        </form>
     </div>
-    <div class="mb-2">
-        <input type="text" name="comment" placeholder="Комментарий к заказу (необязательно)" class="form-control">
-    </div>
-    <button type="submit" class="btn btn-primary">Добавить заказ</button>
-</form>
+</div>
 
 {% if error %}
 <div class="alert alert-danger mt-2">{{ error }}</div>

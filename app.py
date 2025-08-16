@@ -201,6 +201,165 @@ def rolls():
     rolls = df.to_dict(orient='records')
     return render_template('rolls.html', rolls=rolls)
 
+@app.route('/sets')
+@role_required(['chef', 'staff'])
+def sets():
+    """Страница с сетов"""
+    from models import SETS_FILE, SET_COMPOSITION_FILE
+    
+    if not os.path.exists(SETS_FILE):
+        return render_template('sets.html', sets=[], rolls=[])
+    
+    sets_df = pd.read_excel(SETS_FILE)
+    composition_df = pd.read_excel(SET_COMPOSITION_FILE) if os.path.exists(SET_COMPOSITION_FILE) else pd.DataFrame()
+    
+    # Загружаем роллы для редактирования состава
+    rolls_df = pd.read_excel(ROLLS_FILE)
+    rolls = rolls_df.to_dict(orient='records')
+    
+    sets_data = []
+    for _, set_row in sets_df.iterrows():
+        set_id = set_row['id']
+        composition = composition_df[composition_df['set_id'] == set_id].to_dict(orient='records')
+        
+        sets_data.append({
+            'id': set_row['id'],
+            'name': set_row['name'],
+            'cost_price': set_row['cost_price'],
+            'retail_price': set_row['retail_price'],
+            'set_price': set_row['set_price'],
+            'discount_percent': set_row['discount_percent'],
+            'gross_profit': set_row['gross_profit'],
+            'margin_percent': set_row['margin_percent'],
+            'composition': composition
+        })
+    
+    return render_template('sets.html', sets=sets_data, rolls=rolls)
+
+@app.route('/sets/edit', methods=['POST'])
+@role_required(['chef'])
+def edit_set():
+    """Редактирование сета"""
+    from models import SETS_FILE
+    
+    set_id = int(request.form['set_id'])
+    name = request.form['name']
+    cost_price = float(request.form['cost_price'])
+    retail_price = float(request.form['retail_price'])
+    set_price = float(request.form['set_price'])
+    discount_percent = float(request.form['discount_percent'])
+    
+    # Рассчитываем прибыль и маржу
+    gross_profit = set_price - cost_price
+    margin_percent = (gross_profit / cost_price * 100) if cost_price > 0 else 0
+    
+    # Обновляем данные в файле
+    sets_df = pd.read_excel(SETS_FILE)
+    sets_df.loc[sets_df['id'] == set_id, 'name'] = name
+    sets_df.loc[sets_df['id'] == set_id, 'cost_price'] = cost_price
+    sets_df.loc[sets_df['id'] == set_id, 'retail_price'] = retail_price
+    sets_df.loc[sets_df['id'] == set_id, 'set_price'] = set_price
+    sets_df.loc[sets_df['id'] == set_id, 'discount_percent'] = discount_percent
+    sets_df.loc[sets_df['id'] == set_id, 'gross_profit'] = gross_profit
+    sets_df.loc[sets_df['id'] == set_id, 'margin_percent'] = margin_percent
+    
+    sets_df.to_excel(SETS_FILE, index=False)
+    
+    log_audit('Редактирование', 'Сет', name, f'Обновлены параметры: цена сета {set_price}с, себестоимость {cost_price}с', None)
+    flash(f'Сет "{name}" успешно обновлен', 'success')
+    
+    return redirect(url_for('sets'))
+
+@app.route('/sets/edit_composition', methods=['POST'])
+@role_required(['chef'])
+def edit_set_composition():
+    """Редактирование состава сета"""
+    from models import SET_COMPOSITION_FILE
+    
+    set_id = int(request.form['set_id'])
+    roll_ids = request.form.getlist('roll_ids[]')
+    
+    # Удаляем старый состав
+    composition_df = pd.read_excel(SET_COMPOSITION_FILE)
+    composition_df = composition_df[composition_df['set_id'] != set_id]
+    
+    # Добавляем новый состав
+    new_composition = []
+    for roll_id in roll_ids:
+        if roll_id:  # Проверяем, что roll_id не пустой
+            # Получаем название ролла
+            rolls_df = pd.read_excel(ROLLS_FILE)
+            roll_name = rolls_df[rolls_df['id'] == int(roll_id)]['name'].iloc[0] if not rolls_df[rolls_df['id'] == int(roll_id)].empty else f'Ролл {roll_id}'
+            
+            new_composition.append({
+                'set_id': set_id,
+                'roll_id': int(roll_id),
+                'roll_name': roll_name
+            })
+    
+    # Добавляем новый состав в файл
+    if new_composition:
+        new_df = pd.DataFrame(new_composition)
+        composition_df = pd.concat([composition_df, new_df], ignore_index=True)
+    
+    composition_df.to_excel(SET_COMPOSITION_FILE, index=False)
+    
+    # Пересчитываем себестоимость сета
+    from models import SETS_FILE
+    sets_df = pd.read_excel(SETS_FILE)
+    set_name = sets_df[sets_df['id'] == set_id]['name'].iloc[0] if not sets_df[sets_df['id'] == set_id].empty else f'Сет {set_id}'
+    
+    # Рассчитываем новую себестоимость на основе состава
+    total_cost = 0
+    for composition in new_composition:
+        roll_id = composition['roll_id']
+        # Получаем рецепт ролла
+        recipes_df = pd.read_excel('roll_recipes.xlsx')
+        roll_recipe = recipes_df[recipes_df['roll_id'] == roll_id]
+        
+        for _, recipe_row in roll_recipe.iterrows():
+            ingredient_id = recipe_row['ingredient_id']
+            amount = recipe_row['amount_per_roll']
+            
+            # Получаем цену ингредиента
+            ingredients_df = pd.read_excel(INGREDIENTS_FILE)
+            ingredient = ingredients_df[ingredients_df['id'] == ingredient_id]
+            if not ingredient.empty:
+                price_per_unit = ingredient.iloc[0]['price_per_unit']
+                total_cost += amount * price_per_unit
+    
+    # Обновляем себестоимость сета
+    sets_df.loc[sets_df['id'] == set_id, 'cost_price'] = total_cost
+    
+    # Пересчитываем прибыль и маржу
+    set_price = sets_df.loc[sets_df['id'] == set_id, 'set_price'].iloc[0]
+    gross_profit = set_price - total_cost
+    margin_percent = (gross_profit / total_cost * 100) if total_cost > 0 else 0
+    
+    sets_df.loc[sets_df['id'] == set_id, 'gross_profit'] = gross_profit
+    sets_df.loc[sets_df['id'] == set_id, 'margin_percent'] = margin_percent
+    
+    sets_df.to_excel(SETS_FILE, index=False)
+    
+    log_audit('Редактирование', 'Состав сета', set_name, f'Обновлен состав: {len(new_composition)} роллов, новая себестоимость: {total_cost:.2f}с', None)
+    flash(f'Состав сета "{set_name}" успешно обновлен', 'success')
+    
+    return redirect(url_for('sets'))
+
+@app.route('/sets/<int:set_id>/composition')
+@role_required(['chef'])
+def get_set_composition(set_id):
+    """Получить состав сета для AJAX"""
+    from models import SET_COMPOSITION_FILE
+    
+    if not os.path.exists(SET_COMPOSITION_FILE):
+        return jsonify([])
+    
+    composition_df = pd.read_excel(SET_COMPOSITION_FILE)
+    composition = composition_df[composition_df['set_id'] == set_id].to_dict(orient='records')
+    
+    return jsonify(composition)
+
 @app.route('/rolls/<int:roll_id>', methods=['GET', 'POST'])
 @role_required(['chef'])
 def roll_detail(roll_id):
@@ -413,12 +572,14 @@ def orders():
                 new_row = pd.DataFrame([{
                     'id': new_id,
                     'roll_id': roll_id,
+                    'set_id': None,
                     'quantity': quantity,
                     'order_time': now,
                     'total_price': total_cost,
                     'cost_per_roll': cost_per_roll,
                     'status': 'Принят',
-                    'comment': comment
+                    'comment': comment,
+                    'order_type': 'roll'
                 }])
                 orders_df = pd.concat([orders_df, new_row], ignore_index=True)
                 orders_df.to_excel(ORDERS_FILE, index=False)
@@ -450,19 +611,128 @@ def orders():
     # GET: показать список заказов
     orders_df = pd.read_excel(ORDERS_FILE)
     orders = []
+    
+    # Загружаем данные о сетах для отображения заказов
+    from models import SETS_FILE, SET_COMPOSITION_FILE
+    sets_df = pd.read_excel(SETS_FILE) if os.path.exists(SETS_FILE) else pd.DataFrame()
+    composition_df = pd.read_excel(SET_COMPOSITION_FILE) if os.path.exists(SET_COMPOSITION_FILE) else pd.DataFrame()
+    
+    # Загружаем данные о сетах для формы заказа
+    sets_for_form = sets_df.to_dict(orient='records') if not sets_df.empty else []
+    
     for _, row in orders_df.iterrows():
-        roll_name = rolls_df[rolls_df['id'] == row['roll_id']]['name'].values[0] if not rolls_df[rolls_df['id'] == row['roll_id']].empty else '—'
+        order_type = row.get('order_type', 'roll')
+        
+        if order_type == 'set' and 'set_id' in row and row['set_id'] is not None:
+            # Заказ сета
+            set_data = sets_df[sets_df['id'] == row['set_id']]
+            if not set_data.empty:
+                set_name = set_data.iloc[0]['name']
+                # Получаем состав сета
+                set_composition = composition_df[composition_df['set_id'] == row['set_id']]
+                composition_text = ', '.join([comp['roll_name'] for _, comp in set_composition.iterrows()])
+                item_name = f"Сет: {set_name} ({composition_text})"
+            else:
+                item_name = f"Сет ID:{row['set_id']}"
+        else:
+            # Заказ ролла
+            roll_name = rolls_df[rolls_df['id'] == row['roll_id']]['name'].values[0] if not rolls_df[rolls_df['id'] == row['roll_id']].empty else '—'
+            item_name = roll_name
+        
         orders.append({
             'id': row['id'],
             'order_time': row['order_time'],
-            'roll_name': roll_name,
+            'item_name': item_name,
+            'order_type': order_type,
             'quantity': row['quantity'],
             'cost_per_roll': row['cost_per_roll'] if 'cost_per_roll' in row else '',
             'total_price': row['total_price'],
             'status': row['status'] if 'status' in row else 'Готовится',
             'comment': row['comment'] if 'comment' in row else ''
         })
-    return render_template('orders.html', orders=orders, rolls=rolls, error=error)
+    return render_template('orders.html', orders=orders, rolls=rolls, sets=sets_for_form, error=error)
+
+@app.route('/orders/add_set', methods=['POST'])
+@role_required(['chef', 'staff'])
+def add_set_to_order():
+    """Добавление сета в заказ"""
+    if session.get('role') == 'owner':
+        abort(403)
+    
+    from models import SETS_FILE, SET_COMPOSITION_FILE, ROLLS_FILE
+    
+    set_id = int(request.form['set_id'])
+    quantity = int(request.form['quantity'])
+    comment = request.form.get('comment', '')
+    
+    # Получаем данные о сете
+    sets_df = pd.read_excel(SETS_FILE)
+    set_data = sets_df[sets_df['id'] == set_id]
+    if set_data.empty:
+        flash('Сет не найден', 'danger')
+        return redirect(url_for('sets'))
+    
+    set_info = set_data.iloc[0]
+    set_price = set_info['set_price']
+    total_cost = set_price * quantity
+    
+    # Получаем состав сета
+    composition_df = pd.read_excel(SET_COMPOSITION_FILE)
+    set_composition = composition_df[composition_df['set_id'] == set_id]
+    
+    # Проверяем остатки ингредиентов для всех роллов в сете
+    recipes_df = pd.read_excel('roll_recipes.xlsx')
+    ingredients_df = pd.read_excel(INGREDIENTS_FILE)
+    not_enough = []
+    used_ingredients = []
+    
+    for _, comp in set_composition.iterrows():
+        roll_id = comp['roll_id']
+        roll_recipes = recipes_df[recipes_df['roll_id'] == roll_id]
+        
+        for _, rec in roll_recipes.iterrows():
+            ing_id = rec['ingredient_id']
+            need = rec['amount_per_roll'] * quantity
+            ing_row = ingredients_df[ingredients_df['id'] == ing_id]
+            
+            if ing_row.empty or ing_row.iloc[0]['quantity'] < need:
+                not_enough.append(f"{comp['roll_name']} - {ing_row.iloc[0]['name'] if not ing_row.empty else f'ID {ing_id}'}")
+            else:
+                used_ingredients.append((ing_id, need))
+    
+    if not_enough:
+        flash('Не хватает ингредиентов: ' + ', '.join(not_enough), 'danger')
+        return redirect(url_for('sets'))
+    
+    # Вычитаем ингредиенты
+    for ing_id, need in used_ingredients:
+        idx = ingredients_df[ingredients_df['id'] == ing_id].index[0]
+        ingredients_df.at[idx, 'quantity'] -= need
+    ingredients_df.to_excel(INGREDIENTS_FILE, index=False)
+    
+    # Добавляем заказ
+    orders_df = pd.read_excel(ORDERS_FILE)
+    new_id = (orders_df['id'].max() + 1) if not orders_df.empty else 1
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    new_row = pd.DataFrame([{
+        'id': new_id,
+        'roll_id': None,
+        'set_id': set_id,
+        'quantity': quantity,
+        'order_time': now,
+        'total_price': total_cost,
+        'cost_per_roll': set_info['cost_price'],
+        'status': 'Принят',
+        'comment': comment,
+        'order_type': 'set'
+    }])
+    
+    orders_df = pd.concat([orders_df, new_row], ignore_index=True)
+    orders_df.to_excel(ORDERS_FILE, index=False)
+    
+    flash(f'Сет "{set_info["name"]}" добавлен в заказ', 'success')
+    return redirect(url_for('orders'))
 
 @app.route('/orders/change_status/<int:order_id>', methods=['POST'])
 @role_required(['chef'])
@@ -472,13 +742,17 @@ def change_order_status(order_id):
     if new_status in ['Принят', 'Готовится', 'Готов', 'Отправлен', 'Доставлен']:
         orders_df = pd.read_excel(ORDERS_FILE)
         if not orders_df.empty and order_id in orders_df['id'].values:
+            order = orders_df[orders_df['id'] == order_id].iloc[0]
+            order_type = order.get('order_type', 'roll')
+            
             orders_df.loc[orders_df['id'] == order_id, 'status'] = new_status
             orders_df.to_excel(ORDERS_FILE, index=False)
             
             # Логируем изменение статуса
-            log_audit('change_status', 'order', f'Order #{order_id}', f'Status changed to {new_status}')
+            item_type = 'сет' if order_type == 'set' else 'ролл'
+            log_audit('change_status', 'order', f'Order #{order_id} ({item_type})', f'Status changed to {new_status}')
             
-            flash(f'Статус заказа #{order_id} изменен на "{new_status}"', 'success')
+            flash(f'Статус заказа #{order_id} ({item_type}) изменен на "{new_status}"', 'success')
         else:
             flash('Заказ не найден', 'error')
     else:
@@ -489,23 +763,94 @@ def change_order_status(order_id):
 @app.route('/orders/done/<int:order_id>')
 @role_required(['chef'])
 def order_done(order_id):
-    return redirect(url_for('orders', done=order_id))
+    """Отметить заказ как выполненный"""
+    orders_df = pd.read_excel(ORDERS_FILE)
+    order = orders_df[orders_df['id'] == order_id]
+    
+    if not order.empty and order.iloc[0]['status'] == 'Готовится':
+        order_type = order.iloc[0].get('order_type', 'roll')
+        
+        if order_type == 'set':
+            # Для сета нужно обработать все роллы в составе
+            from models import SET_COMPOSITION_FILE
+            composition_df = pd.read_excel(SET_COMPOSITION_FILE) if os.path.exists(SET_COMPOSITION_FILE) else pd.DataFrame()
+            set_id = order.iloc[0]['set_id']
+            set_composition = composition_df[composition_df['set_id'] == set_id]
+            
+            # Получаем рецепты всех роллов в сете
+            recipes_df = pd.read_excel('roll_recipes.xlsx')
+            order_ingredients_df = pd.read_excel(ORDER_INGREDIENTS_FILE)
+            
+            for _, comp in set_composition.iterrows():
+                roll_id = comp['roll_id']
+                roll_recipes = recipes_df[recipes_df['roll_id'] == roll_id]
+                
+                for _, rec in roll_recipes.iterrows():
+                    ing_id = rec['ingredient_id']
+                    need = rec['amount_per_roll'] * order.iloc[0]['quantity']
+                    
+                    # Фиксируем расход по заказу
+                    order_ingredients_df = pd.concat([
+                        order_ingredients_df,
+                        pd.DataFrame([{'order_id': order_id, 'ingredient_id': ing_id, 'used_amount': need}])
+                    ], ignore_index=True)
+            
+            order_ingredients_df.to_excel(ORDER_INGREDIENTS_FILE, index=False)
+        
+        # Меняем статус заказа
+        orders_df.loc[orders_df['id'] == order_id, 'status'] = 'Сделан'
+        orders_df.to_excel(ORDERS_FILE, index=False)
+        
+        item_type = 'сет' if order_type == 'set' else 'ролл'
+        flash(f'Заказ #{order_id} ({item_type}) отмечен как выполненный', 'success')
+    
+    return redirect(url_for('orders'))
 
 @app.route('/reports')
 @role_required(['chef'])
 def reports():
     orders_df = pd.read_excel(ORDERS_FILE)
-    total_income = orders_df[orders_df['status'] == 'Сделан']['total_price'].sum() if not orders_df.empty else 0
+    
+    # Подсчитываем доходы по типам заказов
+    completed_orders = orders_df[orders_df['status'] == 'Сделан'] if not orders_df.empty else pd.DataFrame()
+    
+    if not completed_orders.empty:
+        roll_orders = completed_orders[completed_orders.get('order_type', 'roll') == 'roll']
+        set_orders = completed_orders[completed_orders.get('order_type', 'roll') == 'set']
+        
+        total_income = completed_orders['total_price'].sum()
+        roll_income = roll_orders['total_price'].sum() if not roll_orders.empty else 0
+        set_income = set_orders['total_price'].sum() if not set_orders.empty else 0
+        
+        # Статистика по заказам
+        total_orders = len(completed_orders)
+        roll_count = len(roll_orders)
+        set_count = len(set_orders)
+    else:
+        total_income = roll_income = set_income = 0
+        total_orders = roll_count = set_count = 0
+    
+    # Расход ингредиентов
     ingredients_df = pd.read_excel(INGREDIENTS_FILE)
     order_ingredients_df = pd.read_excel(ORDER_INGREDIENTS_FILE)
+    
     # Суммируем расход по всем завершённым заказам
     usage = order_ingredients_df.merge(orders_df[['id', 'status']], left_on='order_id', right_on='id')
     usage = usage[usage['status'] == 'Сделан']
+    
     ingredients_usage = []
     for _, ing in ingredients_df.iterrows():
         used = usage[usage['ingredient_id'] == ing['id']]['used_amount'].sum() if not usage.empty else 0
         ingredients_usage.append({'name': ing['name'], 'used': used})
-    return render_template('reports.html', total_income=total_income, ingredients_usage=ingredients_usage)
+    
+    return render_template('reports.html', 
+                         total_income=total_income,
+                         roll_income=roll_income,
+                         set_income=set_income,
+                         total_orders=total_orders,
+                         roll_count=roll_count,
+                         set_count=set_count,
+                         ingredients_usage=ingredients_usage)
 
 @app.route('/stock', methods=['GET', 'POST'])
 @role_required(['chef'])
